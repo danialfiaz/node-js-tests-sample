@@ -24,6 +24,7 @@ jobs:
 
     - name: Perform Scan
       uses: ShiftLeftSecurity/scan-action@master
+      continue-on-error: false
       env:
         WORKSPACE: ""
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -41,6 +42,7 @@ jobs:
   
   build:
     name: Build Image
+    needs: Test
     runs-on: ubuntu-latest
     steps:
     - name: Check out code
@@ -67,6 +69,7 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
   deploy:
+    needs: build
     name: Deployment
     runs-on: ubuntu-latest
     steps:
