@@ -9,11 +9,9 @@ on:
   pull_request:
     # The  below must be a subset of the branches above
     branches: [ main ]
-  schedule:
-    - cron: '27 22 * * 1'
 
 jobs:
-  Scan-Build:
+  Test:
     # Scan runs on ubuntu, mac and windows
     runs-on: ubuntu-latest
     steps:
@@ -40,3 +38,48 @@ jobs:
       uses: github/codeql-action/upload-sarif@v1
       with:
         sarif_file: reports
+  
+  build:
+    name: Build Image
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v3
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build, tag, and push image to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+  deploy:
+    name: Deployment
+    runs-on: ubuntu-latest
+    steps:
+    - name: Update values.yaml with new image tag
+      run: |
+        sed -i "s/^  tag:.*/  tag: ${{ github.sha }} /g" templates/values.yaml
+        
+    - name: Commit and push changes
+      uses: stefanzweifel/git-auto-commit-action@v4
+      with:
+        commit_message: "Update image tag in values.yaml"
+        commit_user_name: "danialfiaz"
+        commit_user_email: "danialfiaz96@gmail.com"
+        branch: master
+      env:
+        GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
